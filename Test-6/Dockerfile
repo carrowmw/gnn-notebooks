@@ -50,7 +50,7 @@ RUN pip install \
 COPY . /app/
 
 # Expose Jupyter port
-EXPOSE 8888
+EXPOSE 8890
 
 # Set up Jupyter configuration
 RUN mkdir -p /root/.jupyter && \
@@ -59,4 +59,4 @@ RUN mkdir -p /root/.jupyter && \
     echo "c.NotebookApp.open_browser = False" >> /root/.jupyter/jupyter_notebook_config.py
 
 # Default command: start Jupyter Lab (uses JUPYTER_TOKEN env var if set)
-CMD ["sh", "-c", "jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --allow-root --ServerApp.token=${JUPYTER_TOKEN:-''}"]
+CMD ["sh", "-c", "jupyter lab --ip=0.0.0.0 --port=8890 --no-browser --allow-root --ServerApp.token=${JUPYTER_TOKEN:-''}"]
