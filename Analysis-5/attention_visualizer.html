@@ -1,0 +1,720 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GAT Attention Score Visualizer</title>
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📊</text></svg>"
+    />
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    />
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+        background: #f5f5f5;
+      }
+
+      #container {
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+      }
+
+      #controls {
+        background: white;
+        padding: 20px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        z-index: 1000;
+      }
+
+      .control-group {
+        display: flex;
+        gap: 20px;
+        align-items: center;
+        flex-wrap: wrap;
+        justify-content: center;
+      }
+
+      .control-item {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+      }
+
+      .slider-container {
+        width: 100%;
+        margin-top: 15px;
+        padding: 15px;
+        background: #f9f9f9;
+        border-radius: 4px;
+      }
+
+      .slider-controls {
+        display: flex;
+        align-items: center;
+        gap: 15px;
+      }
+
+      #timeSlider {
+        flex: 1;
+        min-width: 300px;
+      }
+
+      .slider-label {
+        font-size: 14px;
+        font-weight: 600;
+        color: #333;
+        min-width: 200px;
+      }
+
+      .mode-switch {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 10px;
+      }
+
+      .mode-button {
+        padding: 8px 16px;
+        border: 1px solid #ddd;
+        background: white;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+        transition: all 0.2s;
+      }
+
+      .mode-button.active {
+        background: #4caf50;
+        color: white;
+        border-color: #4caf50;
+      }
+
+      .mode-button:hover {
+        background: #f0f0f0;
+      }
+
+      .mode-button.active:hover {
+        background: #45a049;
+      }
+
+      .play-button {
+        padding: 8px 16px;
+        background: #2196f3;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+        min-width: 80px;
+      }
+
+      .play-button:hover {
+        background: #0b7dda;
+      }
+
+      label {
+        font-size: 14px;
+        font-weight: 600;
+        color: #333;
+      }
+
+      select,
+      input {
+        padding: 8px 12px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 14px;
+        min-width: 250px;
+      }
+
+      select:focus,
+      input:focus {
+        outline: none;
+        border-color: #4caf50;
+      }
+
+      #map {
+        flex: 1;
+        width: 100%;
+      }
+
+      .legend {
+        background: white;
+        padding: 15px;
+        border-radius: 4px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+      }
+
+      .legend-title {
+        font-weight: 600;
+        margin-bottom: 10px;
+        font-size: 14px;
+      }
+
+      .legend-scale {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 5px;
+      }
+
+      .legend-gradient {
+        width: 200px;
+        height: 20px;
+        background: linear-gradient(to right, #fee5d9, #fb6a4a, #a50f15);
+        border: 1px solid #ddd;
+        border-radius: 2px;
+      }
+
+      .legend-labels {
+        display: flex;
+        justify-content: space-between;
+        font-size: 11px;
+        color: #666;
+        margin-top: 2px;
+      }
+
+      .info-box {
+        background: white;
+        padding: 10px;
+        border-radius: 4px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        max-width: 300px;
+      }
+
+      .info-box h4 {
+        margin: 0 0 5px 0;
+        font-size: 14px;
+      }
+
+      .info-box p {
+        margin: 3px 0;
+        font-size: 12px;
+        color: #666;
+      }
+
+      .loading {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: white;
+        padding: 20px 40px;
+        border-radius: 8px;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        z-index: 2000;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="container">
+      <div id="controls">
+        <div class="control-group">
+          <div class="control-item">
+            <label for="layerSelect">Attention Layer:</label>
+            <select id="layerSelect">
+              <option value="layer2" selected>Layer 2</option>
+              <option value="layer1">Layer 1</option>
+            </select>
+          </div>
+          <div class="control-item">
+            <label for="directionSelect">Edge Direction:</label>
+            <select id="directionSelect">
+              <option value="incoming" selected>Incoming</option>
+              <option value="outgoing">Outgoing</option>
+              <option value="both">Both</option>
+            </select>
+          </div>
+          <div class="control-item">
+            <label for="topK">Top K Edges per Node:</label>
+            <input type="number" id="topK" value="5" min="1" max="20" />
+          </div>
+        </div>
+        <div class="slider-container">
+          <div class="mode-switch">
+            <button class="mode-button active" id="averageMode">
+              Average View
+            </button>
+            <button class="mode-button" id="temporalMode">Temporal View</button>
+          </div>
+          <div
+            class="slider-controls"
+            id="sliderControls"
+            style="display: none"
+          >
+            <button class="play-button" id="playButton">Play</button>
+            <input
+              type="range"
+              id="timeSlider"
+              min="0"
+              max="100"
+              value="0"
+              step="1"
+            />
+            <span class="slider-label" id="timeLabel">Sample: 0</span>
+          </div>
+        </div>
+      </div>
+      <div id="map"></div>
+    </div>
+    <div id="loading" class="loading" style="display: none">
+      Loading data...
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+      // Global data storage
+      let attentionData = null;
+      let sensorLocations = null;
+      let map = null;
+      let edgeLayer = null;
+      let nodeLayer = null;
+      let temporalMode = false;
+      let playInterval = null;
+      let currentTimeIndex = 0;
+
+      // Initialize the map
+      function initMap() {
+        map = L.map("map").setView([54.978, -1.61], 13);
+
+        L.tileLayer(
+          "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
+          {
+            attribution: "© OpenStreetMap contributors © CARTO",
+            maxZoom: 19,
+          },
+        ).addTo(map);
+
+        edgeLayer = L.featureGroup().addTo(map);
+        nodeLayer = L.featureGroup().addTo(map);
+
+        // Add legend
+        const legend = L.control({ position: "bottomright" });
+        legend.onAdd = function (map) {
+          const div = L.DomUtil.create("div", "legend");
+          div.innerHTML = `
+                  <div class="legend-title">Attention Score</div>
+                  <div class="legend-gradient"></div>
+                  <div class="legend-labels">
+                      <span>Low</span>
+                      <span>Medium</span>
+                      <span>High</span>
+                  </div>
+              `;
+          return div;
+        };
+        legend.addTo(map);
+      }
+
+      // Color scale for attention scores
+      function getColor(score, minScore, maxScore) {
+        const normalized = (score - minScore) / (maxScore - minScore);
+        const colors = [
+          { pos: 0, r: 254, g: 229, b: 217 },
+          { pos: 0.5, r: 251, g: 106, b: 74 },
+          { pos: 1, r: 165, g: 15, b: 21 },
+        ];
+
+        let color;
+        if (normalized <= 0.5) {
+          const t = normalized * 2;
+          color = {
+            r: colors[0].r + (colors[1].r - colors[0].r) * t,
+            g: colors[0].g + (colors[1].g - colors[0].g) * t,
+            b: colors[0].b + (colors[1].b - colors[0].b) * t,
+          };
+        } else {
+          const t = (normalized - 0.5) * 2;
+          color = {
+            r: colors[1].r + (colors[2].r - colors[1].r) * t,
+            g: colors[1].g + (colors[2].g - colors[1].g) * t,
+            b: colors[1].b + (colors[2].b - colors[1].b) * t,
+          };
+        }
+
+        return `rgb(${Math.round(color.r)}, ${Math.round(
+          color.g,
+        )}, ${Math.round(color.b)})`;
+      }
+
+      // Get sensor location from name
+      function getLocationFromName(name) {
+        const locationKey = name.split("_")[0];
+        return sensorLocations.find((loc) => loc.location === locationKey);
+      }
+
+      // Get layer data based on mode (average or temporal)
+      function getLayerData(layer) {
+        if (temporalMode && attentionData.temporal) {
+          const temporalData = attentionData.temporal[layer];
+          if (temporalData && temporalData.length > 0) {
+            const timeIndex = parseInt(
+              document.getElementById("timeSlider").value,
+            );
+            const snapshot =
+              temporalData[Math.min(timeIndex, temporalData.length - 1)];
+            return snapshot ? snapshot.edges : {};
+          }
+        }
+        return attentionData[layer];
+      }
+
+      // Update time label
+      function updateTimeLabel() {
+        const timeIndex = parseInt(document.getElementById("timeSlider").value);
+        const temporalData = attentionData.temporal;
+        if (
+          temporalData &&
+          temporalData.layer2 &&
+          temporalData.layer2.length > 0
+        ) {
+          const snapshot =
+            temporalData.layer2[
+              Math.min(timeIndex, temporalData.layer2.length - 1)
+            ];
+          if (snapshot) {
+            const sampleIdx = snapshot.sample_idx;
+            const samplesPerDay = temporalData.samples_per_day || 96;
+            const sampleInterval = temporalData.sample_interval || 4;
+
+            const dayNum = Math.floor(sampleIdx / samplesPerDay);
+            const sampleInDay = sampleIdx % samplesPerDay;
+            const hourInDay = (sampleInDay * 15) / 60; // Assuming 15-min intervals
+
+            document.getElementById("timeLabel").textContent =
+              `Day ${dayNum + 1}, Hour ${hourInDay.toFixed(1)} (Sample ${sampleIdx})`;
+          }
+        } else {
+          document.getElementById("timeLabel").textContent =
+            `Sample: ${timeIndex}`;
+        }
+      }
+
+      // Draw edges and nodes for all nodes
+      function visualizeAttention() {
+        const layer = document.getElementById("layerSelect").value;
+        const direction = document.getElementById("directionSelect").value;
+        const topK = parseInt(document.getElementById("topK").value);
+
+        if (!attentionData) return;
+
+        // Clear previous visualization
+        edgeLayer.clearLayers();
+        nodeLayer.clearLayers();
+
+        const layerData = getLayerData(layer);
+
+        if (temporalMode) {
+          updateTimeLabel();
+        }
+
+        // Collect top K edges for each node
+        const nodeEdges = {};
+        const allNodes = Object.keys(attentionData.nodes);
+
+        allNodes.forEach((nodeId) => {
+          const edges = [];
+
+          for (const [edgeKey, edge] of Object.entries(layerData)) {
+            if (direction === "incoming" && edge.target == nodeId) {
+              edges.push(edge);
+            } else if (direction === "outgoing" && edge.source == nodeId) {
+              edges.push(edge);
+            } else if (
+              direction === "both" &&
+              (edge.source == nodeId || edge.target == nodeId)
+            ) {
+              edges.push(edge);
+            }
+          }
+
+          // Sort by score and take top K
+          edges.sort((a, b) => b.score - a.score);
+          nodeEdges[nodeId] = edges.slice(0, topK);
+        });
+
+        // Flatten all edges and remove duplicates
+        const edgeMap = new Map();
+        Object.values(nodeEdges).forEach((edges) => {
+          edges.forEach((edge) => {
+            const key = `${edge.source}_${edge.target}`;
+            if (!edgeMap.has(key) || edgeMap.get(key).score < edge.score) {
+              edgeMap.set(key, edge);
+            }
+          });
+        });
+
+        const allEdges = Array.from(edgeMap.values());
+
+        if (allEdges.length === 0) {
+          alert("No edges found for this selection");
+          return;
+        }
+
+        console.log(
+          `Visualizing ${allEdges.length} edges (top ${topK} per node)`,
+        );
+
+        // Calculate min/max scores for color scaling
+        const scores = allEdges.map((e) => e.score);
+        const minScore = Math.min(...scores);
+        const maxScore = Math.max(...scores);
+
+        // Draw edges
+        const connectedNodes = new Set();
+        allEdges.forEach((edge) => {
+          const sourceLocation = getLocationFromName(edge.source_name);
+          const targetLocation = getLocationFromName(edge.target_name);
+
+          if (!sourceLocation || !targetLocation) return;
+
+          connectedNodes.add(edge.source);
+          connectedNodes.add(edge.target);
+
+          const color = getColor(edge.score, minScore, maxScore);
+          const weight =
+            1 + ((edge.score - minScore) / (maxScore - minScore)) * 4;
+
+          const line = L.polyline(
+            [
+              [sourceLocation.lat, sourceLocation.lon],
+              [targetLocation.lat, targetLocation.lon],
+            ],
+            {
+              color: color,
+              weight: weight,
+              opacity: 0.5,
+            },
+          );
+
+          line.bindPopup(`
+                  <div class="info-box">
+                      <h4>Edge ${edge.source} → ${edge.target}</h4>
+                      <p><strong>From:</strong> ${edge.source_name
+                        .split("_")
+                        .slice(0, 2)
+                        .join(" ")}</p>
+                      <p><strong>To:</strong> ${edge.target_name
+                        .split("_")
+                        .slice(0, 2)
+                        .join(" ")}</p>
+                      <p><strong>Attention Score:</strong> ${edge.score.toFixed(
+                        4,
+                      )}</p>
+                  </div>
+              `);
+
+          line.addTo(edgeLayer);
+        });
+
+        // Draw all nodes that have connections
+        connectedNodes.forEach((nodeId) => {
+          const nodeName = attentionData.nodes[nodeId];
+          const location = getLocationFromName(nodeName);
+          if (!location) return;
+
+          // Calculate how many top edges this node has
+          const nodeEdgeCount = nodeEdges[nodeId]?.length || 0;
+          const radius = 4 + (Math.min(nodeEdgeCount, topK) / topK) * 4;
+
+          const marker = L.circleMarker([location.lat, location.lon], {
+            radius: radius,
+            fillColor: "#2196F3",
+            color: "white",
+            weight: 2,
+            opacity: 1,
+            fillOpacity: 0.7,
+          });
+
+          marker.bindPopup(`
+                  <div class="info-box">
+                      <h4>Node ${nodeId}</h4>
+                      <p>${nodeName.replace(/_/g, " ")}</p>
+                      <p><strong>Location:</strong> ${location.location}</p>
+                      <p><strong>Top edges:</strong> ${nodeEdgeCount}</p>
+                  </div>
+              `);
+
+          marker.addTo(nodeLayer);
+        });
+
+        // Fit map to show all nodes
+        if (edgeLayer.getLayers().length > 0) {
+          const bounds = edgeLayer.getBounds();
+          map.fitBounds(bounds, { padding: [50, 50] });
+        }
+      }
+
+      // Toggle between average and temporal mode
+      function setMode(mode) {
+        temporalMode = mode === "temporal";
+
+        // Update button states
+        document
+          .getElementById("averageMode")
+          .classList.toggle("active", !temporalMode);
+        document
+          .getElementById("temporalMode")
+          .classList.toggle("active", temporalMode);
+
+        // Show/hide slider
+        document.getElementById("sliderControls").style.display = temporalMode
+          ? "flex"
+          : "none";
+
+        // Stop playback if switching away from temporal
+        if (!temporalMode && playInterval) {
+          stopPlayback();
+        }
+
+        visualizeAttention();
+      }
+
+      // Play/pause functionality
+      function togglePlayback() {
+        if (playInterval) {
+          stopPlayback();
+        } else {
+          startPlayback();
+        }
+      }
+
+      function startPlayback() {
+        const slider = document.getElementById("timeSlider");
+        const playButton = document.getElementById("playButton");
+        playButton.textContent = "Pause";
+
+        playInterval = setInterval(() => {
+          let value = parseInt(slider.value);
+          value++;
+          if (value > parseInt(slider.max)) {
+            value = 0; // Loop back to start
+          }
+          slider.value = value;
+          visualizeAttention();
+        }, 500); // Update every 500ms
+      }
+
+      function stopPlayback() {
+        if (playInterval) {
+          clearInterval(playInterval);
+          playInterval = null;
+          document.getElementById("playButton").textContent = "Play";
+        }
+      }
+
+      // Initialize slider range based on temporal data
+      function initializeSlider() {
+        if (attentionData && attentionData.temporal) {
+          const temporalData = attentionData.temporal.layer2;
+          if (temporalData && temporalData.length > 0) {
+            const slider = document.getElementById("timeSlider");
+            slider.max = temporalData.length - 1;
+            slider.value = 0;
+            updateTimeLabel();
+          }
+        }
+      }
+
+      // Event listeners
+      document
+        .getElementById("layerSelect")
+        .addEventListener("change", visualizeAttention);
+      document
+        .getElementById("directionSelect")
+        .addEventListener("change", visualizeAttention);
+      document
+        .getElementById("topK")
+        .addEventListener("change", visualizeAttention);
+      document
+        .getElementById("timeSlider")
+        .addEventListener("input", visualizeAttention);
+      document
+        .getElementById("playButton")
+        .addEventListener("click", togglePlayback);
+      document
+        .getElementById("averageMode")
+        .addEventListener("click", () => setMode("average"));
+      document
+        .getElementById("temporalMode")
+        .addEventListener("click", () => setMode("temporal"));
+
+      // Load data files
+      async function loadData() {
+        document.getElementById("loading").style.display = "block";
+
+        try {
+          // Load attention scores
+          const attentionResponse = await fetch("attention_scores.json");
+          attentionData = await attentionResponse.json();
+
+          // Load sensor locations
+          const locationsResponse = await fetch("../traffic_sensors.json");
+          sensorLocations = await locationsResponse.json();
+
+          console.log("Data loaded successfully");
+          console.log("Nodes:", Object.keys(attentionData.nodes).length);
+          console.log(
+            "Layer1 edges:",
+            Object.keys(attentionData.layer1).length,
+          );
+          console.log(
+            "Layer2 edges:",
+            Object.keys(attentionData.layer2).length,
+          );
+
+          if (attentionData.temporal) {
+            console.log(
+              "Temporal snapshots (layer1):",
+              attentionData.temporal.layer1.length,
+            );
+            console.log(
+              "Temporal snapshots (layer2):",
+              attentionData.temporal.layer2.length,
+            );
+          }
+
+          // Initialize slider and visualization
+          initializeSlider();
+          visualizeAttention();
+        } catch (error) {
+          console.error("Error loading data:", error);
+          alert(
+            "Error loading data files. Please ensure attention_scores.json exists.",
+          );
+        } finally {
+          document.getElementById("loading").style.display = "none";
+        }
+      }
+
+      // Event listeners
+      document
+        .getElementById("layerSelect")
+        .addEventListener("change", visualizeAttention);
+      document
+        .getElementById("directionSelect")
+        .addEventListener("change", visualizeAttention);
+      document
+        .getElementById("topK")
+        .addEventListener("change", visualizeAttention);
+
+      // Initialize
+      window.onload = async function () {
+        initMap();
+        await loadData();
+      };
+    </script>
+  </body>
+</html>
