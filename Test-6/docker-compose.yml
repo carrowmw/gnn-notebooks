@@ -6,7 +6,7 @@ services:
       context: .
       dockerfile: Dockerfile
     ports:
-      - "8890:8890"
+      - "8886:8886"
     volumes:
       # Mount the data directory to persist and access your data files
       - ./data:/app/data
