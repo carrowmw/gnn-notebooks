@@ -26,9 +26,9 @@
 
 ## Data Summary - Test 5
 
-| Nodes | DL Features | Static Features | Dynamic Features | Agg Features | Raw Features | Edge Features | Edges | Batch Size | Train Batches | Seq Length | Type |
-| ----- | ----------- | --------------- | ---------------- | ------------ | ------------ | ------------- | ----- | ---------- | ------------- | ---------- | Train |
-| 33 | 149 | 13 | 22 | 9 | 13 | 3 | 192 | 32 | 66 | 128 | Valid |
+| Nodes | DL Features | Static Features | Dynamic Features | Agg Features | Raw Features | Edge Features | Edges | Batch Size | Train Batches | Seq Length | Type  |
+| ----- | ----------- | --------------- | ---------------- | ------------ | ------------ | ------------- | ----- | ---------- | ------------- | ---------- | ----- |
+| 33    | 149         | 13              | 22               | 9            | 13           | 3             | 192   | 32         | 66            | 128        | Train |
 
 ## Model Summary - Test 1
 

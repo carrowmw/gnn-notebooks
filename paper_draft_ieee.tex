@@ -1,0 +1,285 @@
+\documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
+% The preceding line is only needed to identify funding in the first footnote. If that is unneeded, please comment it out.
+%Template version as of 6/27/2024
+
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+% NOTE: \usepackage{fontspec} requires XeLaTeX/LuaLaTeX and typically fails under pdfLaTeX.
+% IEEEtran workflows often assume pdfLaTeX. Uncomment fontspec only if you compile with XeLaTeX/LuaLaTeX.
+%\usepackage{fontspec}
+
+\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+\begin{document}
+
+\title{Conference Paper Title*\\
+{\footnotesize \textsuperscript{*}Note: Sub-titles are not captured for https://ieeexplore.ieee.org  and
+should not be used}
+\thanks{Identify applicable funding agency here. If none, delete this.}
+}
+
+\author{\IEEEauthorblockN{1\textsuperscript{st} Carrow Morris-Wiltshire}
+\IEEEauthorblockA{\textit{School of Engineering} \\
+\textit{Newcastle University}\\
+Newcastle upon Tyne, UK \\
+0009-0007-4503-4000}
+\and
+\IEEEauthorblockN{2\textsuperscript{nd} Phil James}
+\IEEEauthorblockA{\textit{School of School of Mathematics, Statistics and Physics} \\
+\textit{Newcastle University}\\
+Newcastle upon Tyne, UK \\
+0000-0001-9248-0280}
+\and
+\IEEEauthorblockN{3\textsuperscript{rd} Sheen Cabaneros}
+\IEEEauthorblockA{\textit{School of Engineering} \\
+\textit{Newcastle University}\\
+Newcastle upon Tyne, UK \\
+0000-0002-3903-0958}
+}
+
+\maketitle
+
+\section{Introduction}
+
+The effective deployment of Artificial Intelligence (AI) in smart cities is contingent upon the "perception" and "comprehension" layers of situational awareness \cite{index.pdf, p. 1}. While Deep Learning (DL) has demonstrated high fidelity in controlled environments, real-world Urban Internet of Things (IoT) networks present a hostile deployment landscape. Unlike curated academic datasets, live sensor streams do not afford the luxury of "burn-in" periods for model stabilisation, nor do they guarantee the stationarity required for standard imputation techniques \cite{20251031_DSTL_Report_3.pdf, p. 2}.
+
+A primary barrier to operational resilience is the handling of data artifacts and extreme sparsity. Standard forecasting models, such as Long Short-Term Memory (LSTM) networks, generally assume a clear distinction between "true zeros" (quiescent flow) and missing data (sensor failure). However, in many operational networks, including the Newcastle Urban Observatory evaluated in this study, this distinction is semantically collapsed \cite{index.pdf, p. 2}. The absence of a data packet may signify zero pedestrians or a network outage, creating a "zero-inflation" problem that is unresolvable by deterministic regression alone.
+
+In this work, we propose a resilience-first approach using a Graph Attention Network (GAT) coupled with a Zero-Inflated Negative Binomial (ZINB) objective. By explicitly modelling the probability of zero-inflation, we enable the system to operate on raw, artifact-laden streams without upstream imputation. We further validate this approach by analysing the model's calibration (Probability Integral Transform) under extreme missingness assumptions and interrogating the learned attention weights to determine how static urban characteristics---such as proximity to schools or transport hubs---govern the model's dynamic resilience to data loss \cite{iter4_gat_explainability.ipynb}.
+
+\section{Related Work}
+
+\subsection{Spatiotemporal Dependencies and GNNs}
+Urban phenomena exhibit complex spatial and temporal autocorrelation patterns that cannot be captured by methods assuming independent observations \cite{index.pdf, p. 2}. Recent shifts toward Graph Neural Networks (GNNs) allow for the modelling of non-Euclidean structures, where sensors are nodes and their physical or functional proximity defines edges. Graph Attention Networks (GATs) further improve upon this by allowing nodes to dynamically weight the influence of their neighbours, a feature critical for capturing transient urban dynamics like peak-hour shifts \cite{iter4_gat.ipynb, Cell 2}.
+
+\subsection{The Challenge of "Dirty" IoT Data}
+While GNNs excel in spatial modelling, they are sensitive to the "completeness" of node features. Research indicates that the continuity of data---the length of gap-free sequences---is a stronger determinant of forecasting error than overall completeness, as short sequences prevent models from learning essential daily periodicities \cite{sn-article.pdf, p. 1}. Most existing frameworks address this via imputation (e.g., k-NN or Mean imputation), but these methods often fail to scale in real-time, high-dimensional sensor networks \cite{20240129_CMW_Proposal_for_DSTL.pdf, p. 12}.
+
+\subsection{Probabilistic Resilience}
+To move beyond deterministic point estimates, recent work has explored probabilistic heads. The Negative Binomial (NB) distribution is often preferred over Poisson for traffic data due to its ability to handle overdispersion (where variance exceeds the mean) \cite{index.pdf, p. 18}. We extend this by employing a Zero-Inflated (ZINB) variant, which has shown superior performance in handling the excess zeros common in sparse IoT networks, achieving significantly lower Validation Negative Log-Likelihood (NLL) and Akaike Information Criterion (AIC) scores compared to standard Poisson models \cite{index.pdf, p. 18, Table 4.5.3}.
+
+\section{Problem Formulation: The Ambiguity of Zeros}
+
+\subsection{The "No-Genuine-Zero" Paradox}
+Let $\mathcal{G} = (\mathcal{V}, \mathcal{E})$ represent the sensor graph where $\mathbf{X} \in \mathbb{R}^{N \times T}$ denotes the count matrix. In idealised settings, an observation $x_{i,t} = 0$ implies no flow, while $x_{i,t} = \emptyset$ implies missingness. However, in the Newcastle Urban Observatory infrastructure, the reporting protocol is ambiguous:
+\begin{equation}
+\label{eq:obs_ambiguity}
+ y_{obs} =
+\begin{cases}
+0 & \text{if } \text{Flow}=0 \text{ OR } \text{Sensor Failure} \\
+y_{true} & \text{if } \text{Flow} > 0 \text{ AND } \text{Sensor Active}
+\end{cases}
+\end{equation}
+Crucially, the dataset contains no "verified" zeros to validate against, creating a scenario where the model must learn to predict zeros without a ground truth for recall.
+
+\subsection{Probabilistic Resolution via ZINB}
+To address this, we model the conditional probability $P(y | \mathbf{x})$ not as a point estimate, but as a Zero-Inflated Negative Binomial (ZINB) distribution. This requires assuming that the underlying mobility process follows a Negative Binomial distribution---a standard assumption in traffic flow analysis to account for overdispersion \cite{index.pdf, p. 18}. The ZINB parameterisation effectively disentangles the two sources of zeros:
+\begin{equation}
+\label{eq:zinb_def}
+P(y_i | \mu_i, \theta_i, \pi_i) = \pi_i \delta(y_i) + (1 - \pi_i) \text{NB}(y_i | \mu_i, \theta_i)
+\end{equation}
+Here, $\pi_i$ represents the learned probability of "structural" zeros (artifacts/failures), while the NB component models the "true" count process. This allows the model to output high uncertainty ($\pi \approx 1$) during outages rather than hallucinating flow values.
+
+\section{Methods}
+
+\subsection{Problem Formulation}
+We formulate the urban crowd flow prediction problem as a spatiotemporal regression task on a graph $\mathcal{G} = (\mathcal{V}, \mathcal{E})$, where $\mathcal{V}$ represents the set of $N=222$ sensor nodes and $\mathcal{E}$ represents the set of edges defining connectivity \cite{iter4_gat_explainability_ipynb}. Given a historical sequence of node features $\mathbf{X} \in \mathbb{R}^{B \times T \times N \times F}$, where $B$ is the batch size, $T$ is the temporal window, and $F$ denotes the feature dimension (comprising pedestrian counts and temporal embeddings), the goal is to predict the flow parameters for the subsequent timestep $T+1$.
+
+Unlike standard regression approaches that predict a deterministic scalar $y \in \mathbb{R}$, our model estimates the parameters of a Zero-Inflated Negative Binomial (ZINB) distribution to explicitly model the high sparsity and overdispersion characteristic of urban sensor data.
+
+
+\subsection{Dynamic Graph Attention Architecture}
+To capture non-Euclidean spatial dependencies, we employ a Graph Attention Network (GATv2) architecture. Unlike static graph convolutions, GATv2 computes attention weights dynamically based on the current state of the nodes, allowing the network to adapt to changing flow regimes (e.g., peak vs. off-peak).
+
+\subsubsection{Feature Integration}
+For each node $i$, the input state vector $\mathbf{h}_i^{(0)}$ is constructed by concatenating dynamic time-series features with static node metadata (e.g., land use descriptors). This ensures the attention mechanism considers both the transient flow state and the permanent functional characteristics of the location \cite{iter4_gat_ipynb}.
+
+\subsubsection{GATv2 Mechanism}
+We employ a multi-layer GATv2 configuration. For a given layer $l$, the attention coefficient $\alpha_{i,j}$ between node $i$ and its neighbour $j \in \mathcal{N}_i$ is computed as:
+
+\begin{equation}
+\label{eq:gat_energy}
+ e_{i,j} = \mathbf{a}^{\top} \text{LeakyReLU}\left( \mathbf{W} \cdot [\mathbf{h}_i^{(l)} \| \mathbf{h}_j^{(l)}] \right)
+\end{equation}
+
+\begin{equation}
+\label{eq:gat_softmax}
+\alpha_{i,j} = \frac{\exp(e_{i,j})}{\sum_{k \in \mathcal{N}_i} \exp(e_{i,k})}
+\end{equation}
+
+where $\mathbf{W}$ is a learnable weight matrix, $\mathbf{a}$ is the attention vector, and $\|$ denotes concatenation. The node representation is updated via a weighted sum of neighbours, followed by a non-linear activation $\sigma$:
+
+\begin{equation}
+\label{eq:gat_update}
+\mathbf{h}_i^{(l+1)} = \sigma \left( \sum_{j \in \mathcal{N}_i} \alpha_{i,j} \mathbf{W} \mathbf{h}_j^{(l)} \right)
+\end{equation}
+
+To mitigate overfitting on noisy sensor data, we apply Layer Normalization and a Dropout rate of 0.1 after each graph convolutional block \cite{iter4_gat_ipynb}.
+
+\subsection{Probabilistic Output Layer (ZINB)}
+Urban IoT data frequently contains "structural zeros" (sensor faults) indistinguishable from "true zeros" (no pedestrians). To address this, we replace the standard Mean Squared Error (MSE) objective with a probabilistic ZINB head. The model projects the final hidden state $\mathbf{h}_i^{(L)}$ into three distribution parameters:
+\begin{itemize}
+    \item $\mu_i$: The mean of the negative binomial distribution (via Softplus activation).
+    \item $\theta_i$: The dispersion parameter (via Softplus activation).
+    \item $\pi_i$: The probability of zero inflation (via Sigmoid activation).
+\end{itemize}
+
+\subsubsection{Loss Function}
+The network is trained to minimize the Negative Log-Likelihood (NLL) of the observed counts $y$ given the predicted parameters. The likelihood function is defined piecewise:
+
+\begin{equation}
+\label{eq:zinb_likelihood_piecewise}
+P(y_i | \mu_i, \theta_i, \pi_i) =
+\begin{cases}
+\pi_i + (1 - \pi_i) P_{NB}(0 | \mu_i, \theta_i) & \text{if } y_i = 0 \\
+(1 - \pi_i) P_{NB}(y_i | \mu_i, \theta_i) & \text{if } y_i > 0
+\end{cases}
+\end{equation}
+
+\subsection{Calibration under Missingness Ambiguity (Two-Extremes PIT \& ECDF)}
+Because the reporting protocol collapses zeros and missingness (Eq.~\ref{eq:obs_ambiguity}), standard calibration analysis is not identifiable from the raw test stream alone. We therefore evaluate probabilistic calibration under two limiting boundary conditions (a ``two-extremes bracket''):
+\begin{enumerate}
+    \item \textbf{Assumption A (NaNs dropped / conditional-on-observed):} Exclude missing values and evaluate only on observed non-missing reports.
+    \item \textbf{Assumption B (NaNs as 0 / best-case for ``true-zero NaN''):} Treat all missing values as true zeros and include them in evaluation.
+\end{enumerate}
+
+We compute the Probability Integral Transform (PIT) for the ZINB predictive distribution. Because the outcome is discrete, we use the randomized PIT: for each observation $y$, sample
+\begin{equation}
+\label{eq:rand_pit}
+U \sim \text{Uniform}(F(y-1),\,F(y)),
+\end{equation}
+where $F(\cdot)$ is the predictive CDF.
+
+To reduce confounding from the ambiguous zero-state, we also evaluate a \textbf{conditional-positive} calibration diagnostic on the subset $y>0$. Let $P_0=P(Y=0)$ under the ZINB. The conditional CDF is
+\begin{equation}
+\label{eq:cond_pos_cdf}
+F_+(y)=\frac{F(y)-P_0}{1-P_0},\quad y>0,
+\end{equation}
+and we apply the same randomized PIT construction using $F_+$.
+
+\subsection{Tail and Peak Diagnostics}
+Operational nowcasting systems are often dominated by rare high-impact events (e.g., commuting peaks, event dispersals). In addition to global MAE/RMSE on $y>0$, we report tail error on the top 5\% and top 1\% of observed positive counts, and we audit worst underpredicted peak cases with node/time indices.
+
+\subsection{Attention Explainability}
+To verify if the model's resilience is topologically grounded, we extract the learned attention weights $\alpha_{i,j}$ from the GATv2 layers. We define the \textit{Outgoing Influence} $I_j = \sum_{k} \alpha_{k,j}$ as a measure of a node's broadcasting power. We then regress the sensitivity of this influence to missing data against static node features (e.g., land use) using Ridge Regression, determining which urban environments foster model robustness.
+
+
+\section{Results}
+
+\subsection{Distributional Calibration under Ambiguous Zeros}
+The ZINB approach demonstrates superior fit compared to baseline Poisson models, achieving a Validation NLL of 2.45 against the Poisson's 3.85 \cite{index.pdf, Table 4.5.3}.
+
+\textbf{Two-extremes PIT:} When calibration is evaluated under the two boundary conditions, the PIT ECDF deviates substantially from the uniform reference in both cases, indicating miscalibration that cannot be explained solely by the missingness ambiguity.
+
+\begin{itemize}
+    \item \textbf{NaNs dropped (conditional-on-observed):} PIT mean $\approx 0.709$ with KS statistic $\approx 0.294$ (p-value $\approx 0$).
+    \item \textbf{NaNs as 0:} PIT mean $\approx 0.839$ with KS statistic $\approx 0.556$ (p-value $\approx 0$). In this setting, the observed zero fraction was $\approx 0.662$ and the mean predicted $P(Y=0)$ was $\approx 0.661$, indicating the model captures the \emph{marginal} zero rate under this assumption while remaining distributionally miscalibrated.
+\end{itemize}
+
+\textbf{Conditional-positive calibration:} On the positive-only subset, the conditional-positive randomized PIT still departs from uniformity (PIT mean $\approx 0.581$, KS statistic $\approx 0.272$, p-value $\approx 0$), suggesting that miscalibration persists even after removing the ambiguous zero-state.
+
+[Insert PIT/ECDF Figure here]
+
+\subsection{Error Growth and Peak Underprediction}
+Global error metrics on $y>0$ conceal severe degradation in the upper tail. On the positive-only subset, we observed:
+\begin{itemize}
+    \item \textbf{All $y>0$:} MAE $\approx 6.792$, RMSE $\approx 16.920$.
+    \item \textbf{Top 5\% of $y>0$ (threshold $y \ge 37$):} MAE $\approx 55.304$, RMSE $\approx 68.048$.
+    \item \textbf{Top 1\% of $y>0$ (threshold $y \ge 93$):} MAE $\approx 115.518$, RMSE $\approx 127.821$.
+\end{itemize}
+
+A residual-versus-level analysis shows increasingly negative residuals as $y$ increases, consistent with amplitude compression: the model predicts in a narrow band while observed peaks span substantially higher magnitudes.
+
+\textbf{Peak audit:} Over $664{,}613$ positive observations, the top-1\% peak subset contained $6{,}685$ points (threshold $y\ge 93$). The 25 worst underpredicted peaks were concentrated in 5 unique nodes, indicating localized failure modes (specific sensors/contexts) rather than uniform degradation across the network.
+
+[Insert tail/peak scatter and residual-vs-level figures here]
+
+\subsection{Attention Dynamics and Static Determinants}
+We investigated whether the model's ability to "route around" missing data is uniform across the city. By correlating data completeness with attention influence, we found that the network dynamically up-weights reliable nodes ($\rho > 0$) \cite{iter4_gat_explainability.ipynb}.
+
+A Ridge Regression analysis ($R^2 = 0.129$, $p=0.005$) on these sensitivity scores reveals that this dynamic adaptation is linked to static urban functions:
+\begin{itemize}
+    \item \textbf{High Sensitivity (Schools):} Nodes near schools exhibited the strongest positive association (+0.070, 100\% stability). This suggests the model treats school zones as high-value signals only when data is intact, likely due to their highly periodic but transient flow patterns (e.g., drop-off times).
+    \item \textbf{High Robustness (Transport Hubs):} Conversely, nodes near rail stations showed a robust negative association (-0.062). This indicates that transport hubs serve as "anchors" in the graph attention structure, maintaining their influence regardless of transient data quality, likely due to their role as central connectors in the physical road network.
+\end{itemize}
+These results imply that the GAT structure successfully learns to prioritise topological stability (hubs) over transient periodicity (schools) when faced with data artifacts.
+
+\begin{figure}[htbp]
+\centerline{\includegraphics[width=1\linewidth]{forecasting_uncertainty.png}}
+\caption{ZINB Probabilistic Forecasting. The blue line represents the predicted mean ($\mu$), while the orange shaded region indicates the 95\% prediction interval derived from the dispersion parameter ($\theta$). Note how the model captures the high variance during peak hours.}
+\label{fig:forecasting_uncertainty}
+\end{figure}
+
+\begin{table}[htbp]
+\caption{Model Performance Metrics on Newcastle Urban Observatory Data}
+\begin{center}
+\begin{tabular}{|l|c|c|c|}
+\hline
+\textbf{Metric} & \textbf{Train} & \textbf{Validation} & \textbf{Test} \\
+\hline
+ZINB NLL (Primary) & 0.7730 & 0.8244 & 0.7970 \\
+\hline
+MSE & 2.6224 & 1.6756 & 1.8668 \\
+\hline
+\end{tabular}
+\label{tab:metrics}
+\end{center}
+\end{table}
+
+
+\subsection{Structural Resilience and Attention Dynamics}
+To understand how the model maintains performance under sensor failure, we analysed the relationship between node data completeness (the fraction of valid readings per window) and learned attention weights.
+
+
+\subsubsection{Directionality and Normalisation Constraints}
+A naive analysis of attention often fails due to the architectural constraints of the GATv2 mechanism. The attention coefficients $\alpha_{i,j}$ are normalized via a softmax function over the \textit{incoming} neighborhood $\mathcal{N}_i$ for each target node $i$, such that $\sum_{k \in \mathcal{N}_i} \alpha_{i,k} = 1$. Consequently, the sum of incoming attention is structurally invariant and cannot serve as a metric for sensor reliance.
+
+To address this, we define two normalisation-aware metrics:
+\begin{itemize}
+    \item \textbf{Outgoing Influence (Source-centric):} The sum of attention weights originating from node $j$, representing its broadcasting power: $I_j = \sum_{k} \alpha_{k,j}$.
+    \item \textbf{Incoming Concentration (Target-centric):} The entropy of the incoming attention distribution, representing whether a node relies on specific neighbours or diffuses reliance: $H_i = - \sum_{j \in \mathcal{N}_i} \alpha_{i,j} \log \alpha_{i,j}$.
+\end{itemize}
+
+\subsubsection{Sensitivity to Missing Data}
+We quantified the model's sensitivity to data quality by calculating the Spearman correlation ($\rho$) between a node's data completeness and its centered Outgoing Influence. Centering was applied to remove node-specific topological baselines (e.g., high-degree nodes always having higher sums).
+
+The resulting metric, $\rho_{\text{comp}}$, indicates that the model dynamically re-weights the graph: reliable nodes (high completeness) exhibit increased Outgoing Influence, effectively becoming "anchors" for the network, while incomplete nodes lose broadcasting power [Source: iter4\_gat\_explainability.ipynb].
+
+\subsubsection{Static Determinants of Model Behaviour}
+To determine if this sensitivity is intrinsic to the sensor location, we regressed $\rho_{\text{comp}}$ against 13 static urban features (e.g., road types, POIs) using Ridge regression ($N=135$ nodes).
+
+\textbf{Predictive Power:} The model achieved a 5-fold Cross-Validation $R^2$ of $0.129$. While modest, a permutation test (shuffling targets 1000 times) yielded a null mean $R^2$ of $-0.065$ and a 95th percentile of $-0.007$, resulting in a significant $p$-value of $0.005$. This confirms that static urban context partially governs how the GAT adapts to missing data.
+
+\textbf{Feature Stability:} We performed bootstrapping (500 resamples) to identify robust predictors of sensitivity. Two distinct behaviors emerged:
+\begin{enumerate}
+    \item \textbf{Positive Association (Schools \& Service Roads):} Nodes near schools (mean coef: $+0.070$, 100\% sign stability) and service roads ($+0.064$) showed high sensitivity. We hypothesise these locations exhibit highly periodic, predictable flow (e.g., school runs), causing the model to heavily up-weight them when data is available but aggressively down-weight them when gaps appear.
+    \item \textbf{Negative Association (Transport Hubs):} Proximity to rail stations showed a robust negative association ($-0.062$, 98.8\% stability). This suggests that major transport hubs maintain a consistent influence level in the graph regardless of transient data gaps, likely due to their role as central topological connectors in the underlying road network.
+\end{enumerate}
+
+\begin{table}[htbp]
+\caption{Impact of Urban Context on Model Sensitivity (Ridge Regression Coefficients)}
+\begin{center}
+\begin{tabular}{|l|c|c|}
+\hline
+\textbf{Static Feature} & \textbf{Coefficient} & \textbf{Stability (\%)} \\
+\hline
+Proximity to Schools & +0.070 & 100\% \\
+Service Roads & +0.064 & 100\% \\
+Residential Roads & +0.021 & 85\% \\
+\hline
+Primary Roads & 0.000 & - \\
+\hline
+Rail Stations (Transport Hubs) & -0.062 & 98.8\% \\
+\hline
+\end{tabular}
+\label{tab:coefficients}
+\end{center}
+\end{table}
+
+
+\end{document}
